@@ -1,3 +1,23 @@
+// --- Future Improvements & Stubs ---
+
+// 1. Search/filter users (for admin UI, patient assignment, etc.)
+// router.get('/search', auth, async (req, res) => {
+//   // Example: /api/users/search?role=doctor&specialization=Cardiology
+//   // Implement query logic here
+// });
+
+// 2. Rate limiting (security, brute-force protection)
+// Use express-rate-limit or similar middleware in production
+// Example:
+// const rateLimit = require('express-rate-limit');
+// app.use('/api/users/login', rateLimit({ windowMs: 15*60*1000, max: 10 }));
+
+// 3. Enforce HTTPS in production (see server.js)
+
+// 4. Test endpoint (for automated testing)
+router.get('/test', (req, res) => {
+  res.json({ success: true, message: 'Test endpoint working.' });
+});
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
@@ -56,32 +76,66 @@ function sendEmail(to, subject, text) {
 }
 
 // Signup
-router.post('/signup', [
-  body('name').notEmpty(),
-  body('email').isEmail(),
+router.post('/signup', upload.single('picture'), [
+  body('firstName').notEmpty().withMessage('First name is required'),
+  body('middleName').notEmpty().withMessage('Middle name is required'),
+  body('lastName').notEmpty().withMessage('Last name is required'),
+  body('email').isEmail().withMessage('Valid email is required'),
   body('password')
-    .isLength({ min: 8 })
-    .matches(/[a-z]/)
-    .matches(/[A-Z]/)
-    .matches(/[0-9]/)
-    .matches(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/),
-  body('role').isIn(['nurse', 'doctor', 'admin', 'cardroom'])
+    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
+    .matches(/[a-z]/).withMessage('Password must contain a lowercase letter')
+    .matches(/[A-Z]/).withMessage('Password must contain an uppercase letter')
+    .matches(/[0-9]/).withMessage('Password must contain a number')
+    .matches(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/).withMessage('Password must contain a symbol'),
+  body('role').isIn(['nurse', 'doctor', 'admin', 'cardroom']).withMessage('Role must be nurse, doctor, admin, or cardroom'),
+  // Specialization required for doctor/cardroom
+  body('specialization').if(body('role').isIn(['doctor', 'cardroom'])).notEmpty().withMessage('Specialization is required for doctors and cardroom').isString(),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
   try {
-  const { name, email, password, role } = req.body;
-  const existingUser = await User.findOne({ email });
-  if (existingUser) return res.status(400).json({ error: 'Email already in use' });
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const user = new User({ name, email, password: hashedPassword, role });
-  await user.save();
-  if (!approvalRequests.some(r => r.email === email)) {
-    approvalRequests.push({ name, email, role });
+  const { firstName, middleName, lastName, email, password, role, specialization } = req.body;
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.status(400).json({ error: 'Email already in use' });
+    if ((role === 'doctor' || role === 'cardroom') && !specialization) {
+      return res.status(400).json({ error: 'Specialization is required for doctors and cardroom' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'Profile picture is required' });
+    }
+    // Move file to public folder and update user
+    const ext = path.extname(req.file.originalname);
+    const newPath = path.join('uploads', req.file.filename + ext);
+    fs.renameSync(req.file.path, newPath);
+    const pictureUrl = `http://localhost:5050/${newPath}`;
+    const hashedPassword = await bcrypt.hash(password, 10);
+  const user = new User({ firstName, middleName, lastName, email, password: hashedPassword, role, specialization: specialization || '', picture: pictureUrl });
+    await user.save();
+    if (!approvalRequests.some(r => r.email === email)) {
+      approvalRequests.push({ firstName, middleName, lastName, email, role, specialization: specialization || '', picture: pictureUrl });
+    }
+    res.status(201).json({ message: 'Signup successful, pending approval' });
+// Admin: Edit user (role, specialization, etc.)
+router.put('/:id/admin-edit', auth, async (req, res) => {
+  // Only admin can edit
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  try {
+    const update = req.body;
+    // Prevent email/ID change
+    delete update._id;
+    delete update.email;
+    const user = await User.findByIdAndUpdate(req.params.id, update, { new: true });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
-  res.status(201).json({ message: 'Signup successful, pending approval' });
+});
+
+// Admin: Delete user (already implemented, but ensure only admin)
+// (Enhance existing delete route)
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -103,7 +157,7 @@ router.post('/login', [
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
     const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET || 'secret', { expiresIn: '1d' });
-    res.json({ token, user: { id: user._id, name: user.name, role: user.role, picture: user.picture } });
+  res.json({ token, user: { id: user._id, firstName: user.firstName, middleName: user.middleName, lastName: user.lastName, email: user.email, role: user.role, picture: user.picture } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -169,7 +223,9 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // Delete user
+// Only admin can delete users
 router.delete('/:id', auth, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
   try {
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });

@@ -1,3 +1,17 @@
+// Search/filter medications (by name, patient, prescribedBy, etc.)
+router.get('/search', async (req, res) => {
+  try {
+    const { name, patient, prescribedBy } = req.query;
+    let query = {};
+    if (name) query.name = { $regex: name, $options: 'i' };
+    if (patient) query.patient = patient;
+    if (prescribedBy) query.prescribedBy = prescribedBy;
+    const medications = await Medication.find(query).populate('patient prescribedBy');
+    res.json(medications);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 const express = require('express');
 const router = express.Router();
 const Medication = require('../models/Medication');

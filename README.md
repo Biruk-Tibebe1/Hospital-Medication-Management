@@ -8,7 +8,7 @@ This project provides hospitals with a complete solution for managing patient me
 
 ## Features
 
-+ **User Authentication & Role Management**: Secure signup, login, persistent login, and admin approval. Roles include Admin, Doctor, Nurse, and Cardroom.
+**User Authentication & Role Management**: Secure signup, login, persistent login, and admin approval. Roles include Admin, Doctor, Nurse, and Cardroom. Signup now requires First Name, Middle Name, and Last Name fields for all users.
 + **Patient Management**: Register, view, and manage patient details and medication history. Cardroom users have view-only registration and editing.
 + **Medication Management**: Assign, update, and track medications for each patient.
 + **Notifications**: Automated alerts for medication times, admin approval requests, and notification sound.
@@ -25,7 +25,44 @@ This project provides hospitals with a complete solution for managing patient me
 + **Authentication**: JWT, bcryptjs
 + **File Uploads**: Multer
 
-## Getting Started
+## Demo Data (Seeding)
+
+To add demo doctors with specializations for testing, run the following script from the backend server directory:
+
+cd hospital-medication-manager-server/server
+node seed_doctors.js
+```
+cd hospital-medication-manager-server/server
+node seed_doctors.js
+```
+
+This will add four approved doctors with different specializations to your database.
+
+## User Model & Signup Fields
+
+When signing up, all users must provide:
+- **First Name**
+- **Middle Name**
+- **Last Name**
+- **Email**
+- **Password**
+- **Role** (Admin, Doctor, Nurse, Cardroom)
+- **Profile Picture**
+
+If signing up as a doctor or cardroom, users must also provide their **Specialization** (e.g., Cardiology, Neurology).
+
+Cardroom users can assign patients to doctors, and the doctor list is filtered by specialization.
+
+## Error Handling & Validation
+
+-All forms and API endpoints include validation for required fields and strong passwords.
+-Errors are displayed to users with clear messages.
+-Backend ensures no duplicate emails and valid specializations.
+
+## Admin Features
+
+-Admins can view, approve, and manage all users, including doctors and their specializations.
+-Approval requests are visible in the admin dashboard and can be approved or cancelled.
 
 1. **Clone the repository**
 2. **Install dependencies**
@@ -47,7 +84,7 @@ This project provides hospitals with a complete solution for managing patient me
 
 ## Usage
 
-+ **Signup**: Register as a user and await admin approval.
+**Signup**: Register as a user by providing your first, middle, and last name, email, password, role, and profile picture. Doctors and cardroom users must also provide their specialization. Await admin approval after signup.
 + **Login**: Access your dashboard based on your role. Login is persistent until logout.
 + **Dashboard**: View quick stats, recent activity, announcements, and enjoy a modern UI.
 + **Patients**: Add and manage patient records and medications. Cardroom users have view-only registration/editing.

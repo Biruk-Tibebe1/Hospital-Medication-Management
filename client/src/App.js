@@ -11,12 +11,16 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [message, setMessage] = useState("");
-  const [signupName, setSignupName] = useState("");
+  const [signupFirstName, setSignupFirstName] = useState("");
+  const [signupMiddleName, setSignupMiddleName] = useState("");
+  const [signupLastName, setSignupLastName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [signupPassword2, setSignupPassword2] = useState("");
   const [signupRole, setSignupRole] = useState("nurse");
+  const [signupSpecialization, setSignupSpecialization] = useState("");
   const [signupMsg, setSignupMsg] = useState("");
+  const [signupPicture, setSignupPicture] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem("token") || "");
   const [user, setUser] = useState(() => {
     const userStr = localStorage.getItem("user");
@@ -82,17 +86,24 @@ export default function App() {
       setSignupMsg("Passwords do not match");
       return;
     }
+    if (!signupPicture) {
+      setSignupMsg("Please upload a profile picture");
+      return;
+    }
     setLoading(true);
     try {
+      const formData = new FormData();
+  formData.append("firstName", signupFirstName);
+  formData.append("middleName", signupMiddleName);
+  formData.append("lastName", signupLastName);
+      formData.append("email", signupEmail);
+      formData.append("password", signupPassword);
+      formData.append("role", signupRole);
+      formData.append("specialization", signupRole === "doctor" || signupRole === "cardroom" ? signupSpecialization : "");
+      formData.append("picture", signupPicture);
       const res = await fetch("http://localhost:5050/api/users/signup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: signupName,
-          email: signupEmail,
-          password: signupPassword,
-          role: signupRole
-        })
+        body: formData
       });
       const data = await res.json();
       if (res.ok) {
@@ -104,9 +115,12 @@ export default function App() {
           body: JSON.stringify({
             adminEmail: "biruksolomonti@gmail.com",
             newUser: {
-              name: signupName,
+              firstName: signupFirstName,
+              middleName: signupMiddleName,
+              lastName: signupLastName,
               email: signupEmail,
-              role: signupRole
+              role: signupRole,
+              specialization: signupRole === "doctor" || signupRole === "cardroom" ? signupSpecialization : ""
             }
           })
         });
@@ -244,15 +258,40 @@ export default function App() {
             <button className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 transition">Login</button>
           </form>
         ) : (
-          <form onSubmit={handleSignup} className="flex flex-col gap-4 mb-2">
+          <form onSubmit={handleSignup} className="flex flex-col gap-4 mb-2" encType="multipart/form-data">
             <input
-              type="text"
-              placeholder="Name"
-              value={signupName}
-              onChange={e => setSignupName(e.target.value)}
+              type="file"
+              accept="image/*"
+              onChange={e => setSignupPicture(e.target.files[0])}
               className="border p-2 rounded focus:outline-green-400"
               required
             />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="First Name"
+                value={signupFirstName}
+                onChange={e => setSignupFirstName(e.target.value)}
+                className="border p-2 rounded focus:outline-green-400 w-1/3"
+                required
+              />
+              <input
+                type="text"
+                placeholder="Middle Name"
+                value={signupMiddleName}
+                onChange={e => setSignupMiddleName(e.target.value)}
+                className="border p-2 rounded focus:outline-green-400 w-1/3"
+                required
+              />
+              <input
+                type="text"
+                placeholder="Last Name"
+                value={signupLastName}
+                onChange={e => setSignupLastName(e.target.value)}
+                className="border p-2 rounded focus:outline-green-400 w-1/3"
+                required
+              />
+            </div>
             <input
               type="email"
               placeholder="Email"
@@ -288,6 +327,16 @@ export default function App() {
               <option value="nurse">Nurse</option>
               <option value="cardroom">Cardroom</option>
             </select>
+            {(signupRole === "doctor" || signupRole === "cardroom") && (
+              <input
+                type="text"
+                placeholder="Specialization (e.g. Cardiology)"
+                value={signupSpecialization}
+                onChange={e => setSignupSpecialization(e.target.value)}
+                className="border p-2 rounded focus:outline-green-400"
+                required
+              />
+            )}
             <button className="w-full py-2 px-4 bg-green-600 text-white rounded hover:bg-green-700 transition">Signup</button>
           </form>
         )}

@@ -26,6 +26,7 @@ db.once('open', () => {
 app.use('/api/patients', require('./routes/patients'));
 app.use('/api/medications', require('./routes/medications'));
 app.use('/api/users', require('./routes/users'));
+app.use('/api/doctors', require('./routes/doctors'));
 
 // Basic route
 app.get('/', (req, res) => {

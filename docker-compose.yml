@@ -1,0 +1,22 @@
+# Docker Compose for Hospital Medication Management
+version: '3.8'
+services:
+  mongo:
+    image: mongo:6
+    restart: always
+    ports:
+      - 27017:27017
+    volumes:
+      - mongo-data:/data/db
+  backend:
+    build: ./hospital-medication-manager-server/server
+    restart: always
+    ports:
+      - 5050:5050
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/hospital
+      - JWT_SECRET=your_jwt_secret
+    depends_on:
+      - mongo
+volumes:
+  mongo-data:

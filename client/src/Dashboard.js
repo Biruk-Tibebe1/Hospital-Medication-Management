@@ -12,6 +12,18 @@ export default function Dashboard({ user, token, onLogout }) {
   // Profile image upload and preview state (move hooks to top level)
   const [preview, setPreview] = useState(user.picture || "https://ui-avatars.com/api/?name=" + encodeURIComponent(user.name));
   const [uploadMsg, setUploadMsg] = useState("");
+  // Doctors list for cardroom
+  const [doctors, setDoctors] = useState([]);
+  // Fetch doctors for cardroom
+  useEffect(() => {
+    if (user.role === "cardroom") {
+      fetch("http://localhost:5050/api/doctors", {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(res => res.json())
+        .then(data => setDoctors(Array.isArray(data) ? data : []));
+    }
+  }, [user.role, token]);
 
   useEffect(() => {
     fetchPatients();
@@ -76,12 +88,11 @@ export default function Dashboard({ user, token, onLogout }) {
   const [showModal, setShowModal] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [newPatient, setNewPatient] = useState({
-  name: "",
-  age: "",
-  dob: new Date().toISOString().slice(0, 10),
-  gender: "Male",
-  cardNumber: Math.floor(100000 + Math.random() * 900000).toString(),
-  doctor: ""
+    name: "",
+    age: "",
+    dob: new Date().toISOString().slice(0, 10),
+    gender: "Male",
+    doctor: ""
   });
   const [registerMsg, setRegisterMsg] = useState("");
 
@@ -179,7 +190,7 @@ export default function Dashboard({ user, token, onLogout }) {
         const data = await res.json();
         if (res.ok) {
           setRegisterMsg("Patient registered successfully!");
-          setNewPatient({ name: "", dob: "", gender: "Male", cardNumber: "" });
+          setNewPatient({ name: "", age: "", dob: new Date().toISOString().slice(0, 10), gender: "Male", doctor: "" });
           fetchPatients();
         } else {
           setRegisterMsg(data.error || "Registration failed");
@@ -222,18 +233,37 @@ export default function Dashboard({ user, token, onLogout }) {
           Patient Management
         </h2>
         {user.role === "cardroom" && (
-          <form onSubmit={handleRegister} className="flex gap-4 mb-8 flex-wrap items-end bg-blue-50 p-4 rounded-xl shadow">
-            <input type="text" placeholder="Name" value={newPatient.name} onChange={e => setNewPatient({ ...newPatient, name: e.target.value })} className="border-2 border-blue-300 p-3 rounded-xl focus:outline-blue-400 bg-white shadow" required />
-            <input type="number" placeholder="Age" value={newPatient.age} onChange={e => setNewPatient({ ...newPatient, age: e.target.value })} className="border-2 border-blue-300 p-3 rounded-xl focus:outline-blue-400 bg-white shadow" required min="0" />
-            <input type="date" placeholder="DOB" value={newPatient.dob} readOnly className="border-2 border-blue-300 p-3 rounded-xl focus:outline-blue-400 bg-white shadow" required />
-            <select value={newPatient.gender} onChange={e => setNewPatient({ ...newPatient, gender: e.target.value })} className="border-2 border-blue-300 p-3 rounded-xl focus:outline-blue-400 bg-white shadow">
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-            </select>
-            <input type="text" placeholder="Card Number" value={newPatient.cardNumber} readOnly className="border-2 border-blue-300 p-3 rounded-xl focus:outline-blue-400 bg-white shadow" required />
-            <input type="text" placeholder="Assigned Doctor" value={newPatient.doctor} onChange={e => setNewPatient({ ...newPatient, doctor: e.target.value })} className="border-2 border-blue-300 p-3 rounded-xl focus:outline-blue-400 bg-white shadow" required />
-            <button className="py-3 px-6 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-bold shadow">Register</button>
-          </form>
+          <>
+            <form onSubmit={handleRegister} className="flex gap-4 mb-8 flex-wrap items-end bg-blue-50 p-4 rounded-xl shadow">
+              <input type="text" placeholder="Name" value={newPatient.name} onChange={e => setNewPatient({ ...newPatient, name: e.target.value })} className="border-2 border-blue-300 p-3 rounded-xl focus:outline-blue-400 bg-white shadow" required />
+              <input type="number" placeholder="Age" value={newPatient.age} onChange={e => setNewPatient({ ...newPatient, age: e.target.value })} className="border-2 border-blue-300 p-3 rounded-xl focus:outline-blue-400 bg-white shadow" required min="0" />
+              <input type="date" placeholder="DOB" value={newPatient.dob} readOnly className="border-2 border-blue-300 p-3 rounded-xl focus:outline-blue-400 bg-white shadow" required />
+              <select value={newPatient.gender} onChange={e => setNewPatient({ ...newPatient, gender: e.target.value })} className="border-2 border-blue-300 p-3 rounded-xl focus:outline-blue-400 bg-white shadow">
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+              {/* Card number is assigned by backend and shown after registration */}
+              <select value={newPatient.doctor} onChange={e => setNewPatient({ ...newPatient, doctor: e.target.value })} className="border-2 border-blue-300 p-3 rounded-xl focus:outline-blue-400 bg-white shadow" required>
+                <option value="">Assign Doctor</option>
+                {doctors.map(doc => (
+                  <option key={doc._id} value={doc.name}>{doc.name} ({doc.specialization})</option>
+                ))}
+              </select>
+              <button className="py-3 px-6 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-bold shadow">Register</button>
+            </form>
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-blue-700 mb-2">Doctors List</h3>
+              {doctors.length === 0 ? (
+                <div className="text-blue-400">No doctors found.</div>
+              ) : (
+                <ul className="list-disc ml-6">
+                  {doctors.map(doc => (
+                    <li key={doc._id} className="mb-1">{doc.name} <span className="text-blue-500">({doc.specialization})</span></li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
         )}
         {/* Patient editing modal for cardroom users */}
         {user.role === "cardroom" && showModal && selectedPatient && (
@@ -408,11 +438,12 @@ export default function Dashboard({ user, token, onLogout }) {
           <svg width="28" height="28" fill="currentColor" viewBox="0 0 20 20"><path d="M10 10a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 1114 0H3z" /></svg>
           Profile
         </h2>
+        {(!token || token === "") && <div className="mb-4 text-red-600 font-semibold">No token provided</div>}
         <img src={preview} alt="Profile" className="w-32 h-32 rounded-full mb-4 shadow-lg object-cover border-4 border-blue-200" />
         <input type="file" accept="image/*" className="mb-4" onChange={handleImageChange} />
         {uploadMsg && <div className="mb-4 text-green-600 font-semibold">{uploadMsg}</div>}
         <div className="mb-4 text-blue-700 font-bold flex items-center gap-2"><svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path d="M10 10a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 1114 0H3z" /></svg> Name: <span className="font-semibold text-blue-900">{user.name}</span></div>
-        <div className="mb-4 text-blue-700 font-bold flex items-center gap-2"><svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path d="M13 16h-1v-4h-1v4H7v-4H6v4H5v-4H4v4H3v-4H2v4H1v-4H0v4h20v-4h-1v4h-1v-4h-1v4h-1v-4h-1v4h-1v-4h-1v4z" /></svg> Email: <span className="font-semibold text-blue-900">{user.email}</span></div>
+        <div className="mb-4 text-blue-700 font-bold flex items-center gap-2"><svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path d="M13 16h-1v-4h-1v4H7v-4H6v4H5v-4H4v4H3v-4H2v4H1v-4H0v4h20v-4h-1v4h-1v-4h-1v4h-1v-4h-1v4h-1v-4h-1v4z" /></svg> Email: <span className="font-semibold text-blue-900">{user.email || 'Not provided'}</span></div>
         <div className="mb-4 text-blue-700 font-bold flex items-center gap-2"><svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path d="M7 9V7a3 3 0 116 0v2a3 3 0 01-6 0zm-2 2a5 5 0 1110 0v2a5 5 0 01-10 0v-2z" /></svg> Role: <span className="font-semibold text-blue-900">{user.role}</span></div>
       </div>
     );
