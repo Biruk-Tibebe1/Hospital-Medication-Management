@@ -1,3 +1,7 @@
+
+const express = require('express');
+const router = express.Router();
+const Medication = require('../models/Medication');
 // Search/filter medications (by name, patient, prescribedBy, etc.)
 router.get('/search', async (req, res) => {
   try {
@@ -12,9 +16,6 @@ router.get('/search', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-const express = require('express');
-const router = express.Router();
-const Medication = require('../models/Medication');
 
 // Create medication
 router.post('/', async (req, res) => {

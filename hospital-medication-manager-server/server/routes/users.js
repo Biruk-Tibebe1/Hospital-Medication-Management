@@ -14,12 +14,12 @@
 
 // 3. Enforce HTTPS in production (see server.js)
 
+const express = require('express');
+const router = express.Router();
 // 4. Test endpoint (for automated testing)
 router.get('/test', (req, res) => {
   res.json({ success: true, message: 'Test endpoint working.' });
 });
-const express = require('express');
-const router = express.Router();
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');

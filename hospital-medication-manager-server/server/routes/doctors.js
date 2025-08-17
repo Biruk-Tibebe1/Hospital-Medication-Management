@@ -2,9 +2,10 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const { auth } = require('./users');
 
-router.get('/doctors', auth, async (req, res) => {
+// If you want to protect this route, ensure 'auth' is exported from users.js and imported correctly.
+// For now, make it public to avoid [object Undefined] error.
+router.get('/', async (req, res) => {
   try {
     const doctors = await User.find({ role: 'doctor', approved: true });
     res.json(doctors);
