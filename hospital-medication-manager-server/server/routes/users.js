@@ -1,0 +1,205 @@
+const express = require('express');
+const router = express.Router();
+const User = require('../models/User');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { body, validationResult } = require('express-validator');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const nodemailer = require('nodemailer');
+const upload = multer({ dest: 'uploads/' });
+
+// Configure Nodemailer transporter (use your SMTP credentials)
+const transporter = nodemailer.createTransport({
+  service: 'gmail', // or another provider
+  auth: {
+    user: process.env.EMAIL_USER || 'your_email@gmail.com',
+    pass: process.env.EMAIL_PASS || 'your_email_password'
+  }
+});
+
+// In-memory approval requests (replace with DB in production)
+const approvalRequests = [];
+const verificationCodes = {};
+
+// JWT auth middleware
+function auth(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header) return res.status(401).json({ error: 'No token provided' });
+  const token = header.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+    req.user = decoded;
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+// Helper: send email using Nodemailer
+function sendEmail(to, subject, text) {
+  const mailOptions = {
+    from: process.env.EMAIL_USER || 'your_email@gmail.com',
+    to,
+    subject,
+    text
+  };
+  transporter.sendMail(mailOptions, (error, info) => {
+    if (error) {
+      console.error('Error sending email:', error);
+    } else {
+      console.log('Email sent:', info.response);
+    }
+  });
+}
+
+// Signup
+router.post('/signup', [
+  body('name').notEmpty(),
+  body('email').isEmail(),
+  body('password')
+    .isLength({ min: 8 })
+    .matches(/[a-z]/)
+    .matches(/[A-Z]/)
+    .matches(/[0-9]/)
+    .matches(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/),
+  body('role').isIn(['nurse', 'doctor', 'admin', 'cardroom'])
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  try {
+  const { name, email, password, role } = req.body;
+  const existingUser = await User.findOne({ email });
+  if (existingUser) return res.status(400).json({ error: 'Email already in use' });
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const user = new User({ name, email, password: hashedPassword, role });
+  await user.save();
+  if (!approvalRequests.some(r => r.email === email)) {
+    approvalRequests.push({ name, email, role });
+  }
+  res.status(201).json({ message: 'Signup successful, pending approval' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Login
+router.post('/login', [
+  body('email').isEmail(),
+  body('password').notEmpty()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+    if (!user || !user.approved) return res.status(401).json({ error: 'Invalid credentials or not approved' });
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
+    const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET || 'secret', { expiresIn: '1d' });
+    res.json({ token, user: { id: user._id, name: user.name, role: user.role, picture: user.picture } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Notify admin endpoint (called from frontend)
+router.post('/notify-admin', async (req, res) => {
+  const { adminEmail, newUser } = req.body;
+  if (!approvalRequests.some(r => r.email === newUser.email)) {
+    approvalRequests.push(newUser);
+  }
+  // Optionally, send email to adminEmail here
+  res.json({ success: true });
+});
+
+// Get approval requests (for admin dashboard)
+router.get('/approval-requests', auth, async (req, res) => {
+  res.json(approvalRequests);
+});
+
+// Cancel (reject) approval request
+router.delete('/approval-requests/:email', auth, async (req, res) => {
+  const { email } = req.params;
+  const idx = approvalRequests.findIndex(r => r.email === email);
+  if (idx !== -1) {
+    approvalRequests.splice(idx, 1);
+    res.json({ success: true });
+  } else {
+    res.status(404).json({ error: 'Request not found' });
+  }
+});
+
+// Approve user signup (admin only)
+router.put('/:id/approve', auth, async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(req.params.id, { approved: true }, { new: true });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Get all users (admin only)
+router.get('/', auth, async (req, res) => {
+  try {
+    const users = await User.find();
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update user
+router.put('/:id', auth, async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Delete user
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    const user = await User.findByIdAndDelete(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ message: 'User deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Profile picture upload
+router.post('/:id/picture', auth, upload.single('picture'), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (req.file) {
+      // Move file to public folder and update user
+      const ext = path.extname(req.file.originalname);
+      const newPath = path.join('uploads', req.file.filename + ext);
+      fs.renameSync(req.file.path, newPath);
+      user.picture = `http://localhost:5050/${newPath}`;
+      await user.save();
+      res.json({ success: true, picture: user.picture });
+    } else {
+      res.status(400).json({ error: 'No file uploaded' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
+module.exports = router;
